@@ -107,6 +107,19 @@ server.${node}=zk${node}.${domain}:2888:3888
           "metrics_collection_interval": 60,
           "run_as_user": "cwagent"
         },
+        "logs": {
+          "logs_collected": {
+            "files": {
+              "collect_list": [
+                {
+                  "file_path": "/zookeeper/logs/zookeeper-zookeeper*",
+                  "log_group_name": "zookeeper.log",
+                  "timestamp_format": "%Y-%m-%d %H:%M:%S,%f"
+                }
+              ]
+            }
+          }
+        },
         "metrics": {
           "namespace": "${cloudwatch_namespace}",
           "append_dimensions": {
