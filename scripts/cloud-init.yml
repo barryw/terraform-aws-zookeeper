@@ -1,0 +1,174 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - jq
+  - java-11-amazon-corretto-headless
+  - nc
+
+mounts:
+  - [ xvdb, /zookeeper/data, "xfs", "defaults,noatime", "0", "0" ]
+  - [ xvdc, /zookeeper/logs, "xfs", "defaults,noatime", "0", "0" ]
+
+write_files:
+  - content: |
+      * * * * * root /usr/local/bin/instance_healthcheck.sh
+
+    owner: root:root
+    path: /etc/cron.d/healthcheck
+    permissions: 0644
+  - content: |
+      #!/bin/bash
+      INSTANCE_ID=`curl -s http://169.254.169.254/latest/meta-data/instance-id`
+      REGION=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region`
+      HEALTH=`echo ruok | nc localhost ${client_port}`
+      if [[ $HEALTH == "imok" ]];
+      then
+        aws autoscaling set-instance-health --instance-id $INSTANCE_ID --health-status Healthy --region $REGION
+      else
+        aws autoscaling set-instance-health --instance-id $INSTANCE_ID --health-status Unhealthy --region $REGION
+      fi
+
+    owner: root:root
+    path: /usr/local/bin/instance_healthcheck.sh
+    permissions: 0700
+  - content: |
+      #!/bin/bash
+      echo Creating zookeeper user and group
+
+      adduser zookeeper -U -d /zookeeper -M
+    path: /run/create_zk_user.sh
+    permissions: 0700
+  - content: |
+      [Unit]
+      Description=ZooKeeper Service
+      Documentation=http://zookeeper.apache.org
+      Requires=network.target
+      After=network.target
+
+      [Service]
+      Type=forking
+      User=zookeeper
+      Group=zookeeper
+      ExecStart=/zookeeper/bin/zkServer.sh start /zookeeper/conf/zoo.cfg
+      ExecStop=/zookeeper/bin/zkServer.sh stop /zookeeper/conf/zoo.cfg
+      ExecReload=/zookeeper/bin/zkServer.sh restart /zookeeper/conf/zoo.cfg
+      WorkingDirectory=/zookeeper
+      Environment=ZK_SERVER_HEAP=${zk_heap}
+
+      [Install]
+      WantedBy=default.target
+    path: /run/zookeeper.service
+    permissions: 0600
+  - content: |
+      tickTime=${tick_time}
+      initLimit=${init_limit}
+      syncLimit=${sync_limit}
+      dataDir=/zookeeper/data
+      dataLogDir=/zookeeper/logs
+      clientPort=${client_port}
+      4lw.commands.whitelist=stat, ruok, conf, isro
+      %{ for node in nodes ~}
+server.${node}=zk${node}.${domain}:2888:3888
+      %{ endfor ~}
+
+    path: /run/zoo.cfg
+    permissions: 0600
+  - content: |
+      #!/bin/bash
+      echo Configuring data and log volume storage
+
+      mkfs.xfs /dev/xvdb
+      mkfs.xfs /dev/xvdc
+
+      mount -a
+
+    path: /run/setup_volumes.sh
+    permissions: 0700
+  - content: |
+      #!/bin/bash
+      echo Installing Zookeeper v${version}
+      wget -O /run/zk.tgz https://archive.apache.org/dist/zookeeper/zookeeper-${version}/apache-zookeeper-${version}-bin.tar.gz
+      tar zxvf /run/zk.tgz --strip 1 -C /zookeeper
+      echo ${index} > /zookeeper/data/myid
+      cp /run/zoo.cfg /zookeeper/conf/zoo.cfg
+      cp /run/zookeeper.service /usr/lib/systemd/system/zookeeper.service && chmod 0644 /usr/lib/systemd/system/zookeeper.service
+      systemctl daemon-reload
+      chkconfig zookeeper on
+
+      chown -R zookeeper:zookeeper /zookeeper
+    path: /run/install_zookeeper.sh
+    permissions: 0700
+  - content: |
+      {
+        "agent": {
+          "metrics_collection_interval": 60,
+          "run_as_user": "cwagent"
+        },
+        "metrics": {
+          "namespace": "${cloudwatch_namespace}",
+          "append_dimensions": {
+              "InstanceId": "$${aws:InstanceId}",
+              "AutoScalingGroupName": "$${aws:AutoScalingGroupName}"
+          },
+          "metrics_collected": {
+            "cpu": {
+              "measurement": [
+                "time_iowait",
+                "time_user",
+                "time_system",
+                "time_active",
+                "usage_system",
+                "usage_user"
+              ]
+            },
+            "disk": {
+              "measurement": [
+                "used_percent"
+              ],
+              "resources": [
+                "/",
+                "/zookeeper/data",
+                "/zookeeper/logs"
+              ]
+            },
+            "diskio": {
+              "measurement": [
+                "read_bytes",
+                "write_bytes"
+              ]
+            },
+            "mem": {
+              "measurement": [
+                "used_percent"
+              ]
+            },
+            "net": {
+              "measurement": [
+                "bytes_sent",
+                "bytes_recv"
+              ]
+            }
+          }
+        }
+      }
+    path: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+    permissions: 0755
+  - content: |
+      #!/bin/bash
+      echo Installing CloudWatch agent
+      wget -O /run/amazon-cloudwatch-agent.rpm https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm
+      rpm -Uvh /run/amazon-cloudwatch-agent.rpm
+      chkconfig amazon-cloudwatch-agent on
+      service amazon-cloudwatch-agent start
+    path: /run/install_cloudwatch_agent.sh
+    permissions: 0700
+
+runcmd:
+  - /run/create_zk_user.sh
+  - /run/setup_volumes.sh
+  - /run/install_zookeeper.sh
+  - /run/install_cloudwatch_agent.sh
+  - service zookeeper start
