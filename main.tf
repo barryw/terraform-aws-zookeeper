@@ -1,3 +1,7 @@
+terraform {
+  required_version = ">=0.13.0"
+}
+
 locals {
   prefix   = var.name_prefix == "" ? "" : "${var.name_prefix}-"
   asg_arns = jsonencode([for arn in aws_autoscaling_group.zookeeper.*.arn : arn])
