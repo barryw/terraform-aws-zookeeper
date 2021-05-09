@@ -16,6 +16,14 @@ This is a Terraform module for bringing up a fully-formed Zookeeper ensemble. It
 - Data and log volumes are separate.
 - CPU, memory, network and disk metrics are sent to CloudWatch metrics.
 - Zookeeper logs are sent to CloudWatch logs.
+- If a Zookeeper process becomes unresponsive, its AutoscalingGroup will replace it automatically.
+
+#### TODO
+
+- Backups
+- Web frontend
+- Maybe use exhibitor?
+- Enable rolling updates on the AutoscalingGroup
 
 #### Usage
 
