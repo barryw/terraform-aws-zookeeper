@@ -28,6 +28,7 @@ data "aws_ami" "base" {
 
 data "aws_route53_zone" "zone" {
   name = "${var.route53_zone}."
+  private_zone = "${var.route53_zone_is_private}."
 }
 
 resource "aws_iam_role" "assume_role" {

@@ -55,6 +55,9 @@ module "zookeeper" {
   log_volume_size           = 10
   # Specify a zone to create records on
   route53_zone              = ""
+  # Specify wether this is a private zone (defaults to public)
+  route53_zone_is_private   = false
+
   # Specify the security group id of the groups to allow connections to ZK. If not specified, use the VPC's CIDR
   client_security_group_id  = ""
   # The namespace to use for CloudWatch metrics
