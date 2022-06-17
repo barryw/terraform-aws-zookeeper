@@ -28,6 +28,7 @@ data "aws_ami" "base" {
 
 data "aws_route53_zone" "zone" {
   name = "${var.route53_zone}."
+  private_zone = var.route53_zone_is_private
 }
 
 resource "aws_iam_role" "assume_role" {
@@ -93,10 +94,15 @@ resource "aws_network_interface" "zookeeper" {
   security_groups = [aws_security_group.zookeeper-internal.id, aws_security_group.zookeeper-external.id]
 }
 
+data "aws_network_interface" "zookeeper" {
+  count           = var.cluster_size
+  id = element(aws_network_interface.zookeeper.*.id, count.index)
+}
+
 resource "aws_autoscaling_group" "zookeeper" {
   count                     = var.cluster_size
   name                      = "${local.prefix}zookeeper${count.index + 1}"
-  availability_zones        = [element(data.aws_availability_zones.available.names, count.index)]
+  availability_zones        = [element(data.aws_network_interface.zookeeper.*.availability_zone, count.index)]
   desired_capacity          = 1
   max_size                  = 1
   min_size                  = 1
@@ -105,14 +111,14 @@ resource "aws_autoscaling_group" "zookeeper" {
 
   launch_template {
     id = element(aws_launch_template.zookeeper.*.id, index(aws_launch_template.zookeeper.*.name,
-    "${local.prefix}zookeeper-${element(data.aws_availability_zones.available.names, count.index)}"))
+    "${local.prefix}zookeeper-${element(data.aws_network_interface.zookeeper.*.availability_zone, count.index)}"))
     version = "$Latest"
   }
 }
 
 resource "aws_launch_template" "zookeeper" {
   count         = var.cluster_size
-  name          = "${local.prefix}zookeeper-${element(data.aws_availability_zones.available.names, count.index)}"
+  name          = "${local.prefix}zookeeper-${element(data.aws_network_interface.zookeeper.*.availability_zone, count.index)}"
   image_id      = data.aws_ami.base.id
   instance_type = var.instance_type
   key_name      = var.keypair_name

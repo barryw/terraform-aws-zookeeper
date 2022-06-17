@@ -93,6 +93,12 @@ variable "route53_zone" {
   type        = string
 }
 
+variable "route53_zone_is_private" {
+  description = "If the Route53 zone for Zookeeper DNS records is private"
+  default     = false
+  type        = bool
+}
+
 variable "client_security_group_id" {
   description = "The security group id to grant access to the zookeeper nodes on port 2181"
   type        = string

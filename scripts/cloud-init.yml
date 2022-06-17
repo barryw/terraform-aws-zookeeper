@@ -69,7 +69,7 @@ write_files:
       dataDir=/zookeeper/data
       dataLogDir=/zookeeper/logs
       clientPort=${client_port}
-      4lw.commands.whitelist=stat, ruok, conf, isro
+      4lw.commands.whitelist=mntr, stat, ruok, conf, isro
       %{ for node in nodes ~}
 server.${node}=zk${node}.${domain}:2888:3888
       %{ endfor ~}
